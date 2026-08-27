@@ -1,6 +1,5 @@
 
-  # Combine design into website
-
+  # A skincare recommendation website
 
 
   ## Running the code
