@@ -86,54 +86,82 @@ export function KendinYap() {
     "Zerdeçal",
     "Aloe Vera",
   ]);
-  const [favorites, setFavorites] = useState<string[]>(() => {
-    if (typeof localStorage === "undefined") return [];
-    try {
-      return JSON.parse(localStorage.getItem(FAV_RECIPES_KEY) || "[]");
-    } catch {
-      return [];
-    }
-  });
+  const [user, setUser] = useState<any>(null);
+  const [favorites, setFavorites] = useState<string[]>([]);
   const [active, setActive] = useState<Recipe | null>(null);
 
   useEffect(() => {
-    async function fetchRecipes() {
+    async function initData() {
+      setLoading(true);
+
+      // 1. Kullanıcı oturumunu kontrol et
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+      const currentUser = session?.user || null;
+      setUser(currentUser);
+
+      // 2. Tarifleri çek
       const { data, error } = await supabase
         .from("recipes")
         .select("*, recipe_ingredients(ingredient_name, detailed_text, sort_order)");
+
       if (error) {
         console.error("Tarifler yüklenirken hata oluştu:", error);
-        setLoading(false);
-        return;
+      } else if (data) {
+        const mapped: Recipe[] = data.map((row: any) => {
+          const sorted = [...(row.recipe_ingredients || [])].sort(
+            (a: any, b: any) => a.sort_order - b.sort_order
+          );
+          return {
+            id: String(row.id),
+            name: row.name,
+            category: row.category,
+            categoryEmoji: row.category_emoji,
+            skinType: row.skin_type,
+            image: row.image,
+            time: row.time,
+            prep: row.prep,
+            apply: row.apply,
+            ingredients: sorted.map((i: any) => i.ingredient_name),
+            ingredientsDetailed: sorted.map((i: any) => i.detailed_text),
+            howTo: row.how_to,
+            benefits: row.benefits,
+            caution: row.caution,
+          };
+        });
+        setRecipes(mapped);
+        mapped.forEach((r) => {
+          recipeInfoById[r.id] = { name: r.name, category: r.category };
+        });
       }
-      const mapped: Recipe[] = (data || []).map((row: any) => {
-        const sorted = [...(row.recipe_ingredients || [])].sort(
-          (a: any, b: any) => a.sort_order - b.sort_order
-        );
-        return {
-          id: row.id,
-          name: row.name,
-          category: row.category,
-          categoryEmoji: row.category_emoji,
-          skinType: row.skin_type,
-          image: row.image,
-          time: row.time,
-          prep: row.prep,
-          apply: row.apply,
-          ingredients: sorted.map((i: any) => i.ingredient_name),
-          ingredientsDetailed: sorted.map((i: any) => i.detailed_text),
-          howTo: row.how_to,
-          benefits: row.benefits,
-          caution: row.caution,
-        };
-      });
-      setRecipes(mapped);
-      mapped.forEach((r) => {
-        recipeInfoById[r.id] = { name: r.name, category: r.category };
-      });
+
+      // 3. Favorileri çek
+      if (currentUser) {
+        const { data: favData, error: favError } = await supabase
+          .from("favorites")
+          .select("item_id")
+          .eq("user_id", currentUser.id)
+          .eq("item_type", "recipe");
+
+        if (!favError && favData) {
+          const favIds = favData.map((f: any) => String(f.item_id));
+          setFavorites(favIds);
+          localStorage.setItem(FAV_RECIPES_KEY, JSON.stringify(favIds));
+        }
+      } else {
+        try {
+          const localFavs = JSON.parse(localStorage.getItem(FAV_RECIPES_KEY) || "[]");
+          setFavorites(localFavs.map(String));
+        } catch {
+          setFavorites([]);
+        }
+      }
+
       setLoading(false);
     }
-    fetchRecipes();
+
+    initData();
   }, []);
 
   const togglePantry = (name: string) =>
@@ -141,12 +169,37 @@ export function KendinYap() {
       prev.includes(name) ? prev.filter((x) => x !== name) : [...prev, name]
     );
 
-  const toggleFavorite = (id: string) =>
-    setFavorites((prev) => {
-      const next = prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id];
-      localStorage.setItem(FAV_RECIPES_KEY, JSON.stringify(next));
-      return next;
-    });
+  const toggleFavorite = async (id: string) => {
+    const stringId = String(id);
+    const isFav = favorites.includes(stringId);
+    const nextFavorites = isFav
+      ? favorites.filter((x) => x !== stringId)
+      : [...favorites, stringId];
+
+    // Anlık ekran ve localStorage güncellemesi
+    setFavorites(nextFavorites);
+    localStorage.setItem(FAV_RECIPES_KEY, JSON.stringify(nextFavorites));
+
+    // Supabase senkronizasyonu
+    if (user) {
+      if (isFav) {
+        await supabase
+          .from("favorites")
+          .delete()
+          .eq("user_id", user.id)
+          .eq("item_id", stringId)
+          .eq("item_type", "recipe");
+      } else {
+        await supabase.from("favorites").insert([
+          {
+            user_id: user.id,
+            item_id: stringId,
+            item_type: "recipe",
+          },
+        ]);
+      }
+    }
+  };
 
   return (
     <>

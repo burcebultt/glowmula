@@ -1,9 +1,8 @@
 import { useState, useEffect } from "react";
 import { PageHero } from "../components/PageHero";
 import { Heart, ChevronLeft, ChevronRight, Plus, LogOut, Mail, KeyRound, Trash2 } from "lucide-react";
-import { FAV_INGREDIENTS_KEY, ingredientNameById } from "./Skin101";
-import { FAV_RECIPES_KEY, recipeInfoById } from "./KendinYap";
-import { SKIN_TYPE_KEY } from "./CiltTipiniOgren";
+import { ingredientNameById } from "./Skin101";
+import { recipeInfoById } from "./KendinYap";
 import { supabase } from "../../supabaseClient";
 
 interface RoutineItem {
@@ -495,70 +494,43 @@ function Dashboard({ userName, userId, onLogout }: { userName: string; userId: s
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [calendarDate]);
 
+  // Bu fonksiyon artık SADECE Supabase'den okuyor — localStorage yedeği yok.
+  // Böylece her hesap yalnızca kendi favorilerini/cilt tipini görür; yeni bir
+  // hesapla giriş yapan biri başka bir hesabın (ya da bu tarayıcının eski)
+  // verisini asla görmez.
   const loadUserData = async () => {
-    // 1. Supabase'den veya localStorage'dan favori içerikleri çek
     try {
-      const { data: ingData } = await supabase
+      const { data: ingData, error } = await supabase
         .from("favorites")
         .select("item_id")
         .eq("user_id", userId)
         .eq("item_type", "ingredient");
 
-      if (ingData && ingData.length > 0) {
-        const names = ingData.map((d) => ingredientNameById[d.item_id]).filter(Boolean);
-        setFavIngredients(names);
-      } else if (typeof localStorage !== "undefined") {
-        const ids: string[] = JSON.parse(localStorage.getItem(FAV_INGREDIENTS_KEY) || "[]");
-        setFavIngredients(ids.map((id) => ingredientNameById[id]).filter(Boolean));
-      } else {
-        setFavIngredients([]);
-      }
-    } catch {
-      if (typeof localStorage !== "undefined") {
-        try {
-          const ids: string[] = JSON.parse(localStorage.getItem(FAV_INGREDIENTS_KEY) || "[]");
-          setFavIngredients(ids.map((id) => ingredientNameById[id]).filter(Boolean));
-        } catch {
-          setFavIngredients([]);
-        }
-      } else {
-        setFavIngredients([]);
-      }
+      if (error) throw error;
+      const names = (ingData || []).map((d) => ingredientNameById[d.item_id]).filter(Boolean);
+      setFavIngredients(names);
+    } catch (err) {
+      console.error("Favori içerikler yüklenirken hata:", err);
+      setFavIngredients([]);
     }
 
-    // 2. Supabase'den veya localStorage'dan favori tarifleri çek
     try {
-      const { data: recData } = await supabase
+      const { data: recData, error } = await supabase
         .from("favorites")
         .select("item_id")
         .eq("user_id", userId)
         .eq("item_type", "recipe");
 
-      if (recData && recData.length > 0) {
-        const recipes = recData.map((d) => recipeInfoById[d.item_id]).filter(Boolean);
-        setFavRecipes(recipes);
-      } else if (typeof localStorage !== "undefined") {
-        const ids: string[] = JSON.parse(localStorage.getItem(FAV_RECIPES_KEY) || "[]");
-        setFavRecipes(ids.map((id) => recipeInfoById[id]).filter(Boolean));
-      } else {
-        setFavRecipes([]);
-      }
-    } catch {
-      if (typeof localStorage !== "undefined") {
-        try {
-          const ids: string[] = JSON.parse(localStorage.getItem(FAV_RECIPES_KEY) || "[]");
-          setFavRecipes(ids.map((id) => recipeInfoById[id]).filter(Boolean));
-        } catch {
-          setFavRecipes([]);
-        }
-      } else {
-        setFavRecipes([]);
-      }
+      if (error) throw error;
+      const recipes = (recData || []).map((d) => recipeInfoById[d.item_id]).filter(Boolean);
+      setFavRecipes(recipes);
+    } catch (err) {
+      console.error("Favori tarifler yüklenirken hata:", err);
+      setFavRecipes([]);
     }
 
-    // 3. Cilt tipini Supabase'den veya localStorage'dan çek
     try {
-      const { data: quizData } = await supabase
+      const { data: quizData, error } = await supabase
         .from("quiz_results")
         .select("result_title, result_desc")
         .eq("user_id", userId)
@@ -566,33 +538,15 @@ function Dashboard({ userName, userId, onLogout }: { userName: string; userId: s
         .limit(1)
         .maybeSingle();
 
+      if (error) throw error;
       if (quizData && quizData.result_title) {
         setSkinType({ title: quizData.result_title, desc: quizData.result_desc });
-      } else if (typeof localStorage !== "undefined") {
-        const saved = localStorage.getItem(SKIN_TYPE_KEY);
-        if (saved) {
-          setSkinType(JSON.parse(saved));
-        } else {
-          setSkinType(null);
-        }
       } else {
         setSkinType(null);
       }
-    } catch {
-      if (typeof localStorage !== "undefined") {
-        try {
-          const saved = localStorage.getItem(SKIN_TYPE_KEY);
-          if (saved) {
-            setSkinType(JSON.parse(saved));
-          } else {
-            setSkinType(null);
-          }
-        } catch {
-          setSkinType(null);
-        }
-      } else {
-        setSkinType(null);
-      }
+    } catch (err) {
+      console.error("Cilt tipi yüklenirken hata:", err);
+      setSkinType(null);
     }
   };
 
@@ -696,6 +650,16 @@ function Dashboard({ userName, userId, onLogout }: { userName: string; userId: s
     }
     const updater = period === "morning" ? setMorning : setEvening;
     updater((prev) => [...prev, { id: data.id, label: data.label, done: data.done, sort_order: data.sort_order }]);
+    loadMonthStatus(calendarDate);
+  }
+
+  async function deleteRoutineItem(id: string, period: "morning" | "evening") {
+    const updater = period === "morning" ? setMorning : setEvening;
+    // Anlık kaldır, kullanıcı beklemesin
+    updater((prev) => prev.filter((it) => it.id !== id));
+
+    const { error } = await supabase.from("routine_items").delete().eq("id", id);
+    if (error) console.error("Rutin silinirken hata:", error);
     loadMonthStatus(calendarDate);
   }
 
@@ -939,6 +903,7 @@ function Dashboard({ userName, userId, onLogout }: { userName: string; userId: s
                   items={morning}
                   onToggle={(id) => toggleRoutineItem(id, "morning")}
                   onAdd={(label) => addRoutineItem("morning", label)}
+                  onDelete={(id) => deleteRoutineItem(id, "morning")}
                 />
                 <RoutineCard
                   title="Akşam Rutini"
@@ -946,6 +911,7 @@ function Dashboard({ userName, userId, onLogout }: { userName: string; userId: s
                   items={evening}
                   onToggle={(id) => toggleRoutineItem(id, "evening")}
                   onAdd={(label) => addRoutineItem("evening", label)}
+                  onDelete={(id) => deleteRoutineItem(id, "evening")}
                 />
               </div>
             )}
@@ -1122,12 +1088,14 @@ function RoutineCard({
   items,
   onToggle,
   onAdd,
+  onDelete,
 }: {
   title: string;
   emoji: string;
   items: RoutineItem[];
   onToggle: (id: string) => void;
   onAdd: (label: string) => void;
+  onDelete: (id: string) => void;
 }) {
   const [value, setValue] = useState("");
 
@@ -1160,26 +1128,35 @@ function RoutineCard({
 
       <div className="flex flex-col gap-2.5">
         {items.map((it) => (
-          <label key={it.id} className="flex items-center gap-2.5 cursor-pointer select-none">
-            <span
-              className={`w-4 h-4 rounded border flex items-center justify-center transition-colors ${
-                it.done ? "bg-[#1C1A17] border-[#1C1A17]" : "border-[#C4BEB6] bg-white"
-              }`}
+          <div key={it.id} className="flex items-center gap-2.5 group">
+            <label className="flex items-center gap-2.5 cursor-pointer select-none flex-1 min-w-0">
+              <span
+                className={`w-4 h-4 rounded border flex items-center justify-center transition-colors shrink-0 ${
+                  it.done ? "bg-[#1C1A17] border-[#1C1A17]" : "border-[#C4BEB6] bg-white"
+                }`}
+              >
+                {it.done && (
+                  <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
+                    <path d="M1.5 5.2 4 7.5 8.5 2.5" stroke="white" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
+                  </svg>
+                )}
+              </span>
+              <input type="checkbox" className="sr-only" checked={it.done} onChange={() => onToggle(it.id)} />
+              <span
+                className={`truncate ${it.done ? "text-[#1C1A17]" : "text-[#5E5954]"}`}
+                style={{ fontFamily: "Geist", fontSize: 14 }}
+              >
+                {it.label}
+              </span>
+            </label>
+            <button
+              onClick={() => onDelete(it.id)}
+              className="text-[#C4BEB6] hover:text-[#C0392B] transition-colors shrink-0"
+              aria-label="Rutin maddesini sil"
             >
-              {it.done && (
-                <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
-                  <path d="M1.5 5.2 4 7.5 8.5 2.5" stroke="white" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
-                </svg>
-              )}
-            </span>
-            <input type="checkbox" className="sr-only" checked={it.done} onChange={() => onToggle(it.id)} />
-            <span
-              className={it.done ? "text-[#1C1A17]" : "text-[#5E5954]"}
-              style={{ fontFamily: "Geist", fontSize: 14 }}
-            >
-              {it.label}
-            </span>
-          </label>
+              <Trash2 size={15} />
+            </button>
+          </div>
         ))}
       </div>
 
