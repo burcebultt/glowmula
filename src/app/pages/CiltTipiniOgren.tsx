@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { PageHero } from "../components/PageHero";
-import { Check, Sparkles, RefreshCw, ChevronRight } from "lucide-react";
+import { Sparkles, RefreshCw, ChevronRight } from "lucide-react";
 import { supabase } from "../../supabaseClient";
 
 export const SKIN_TYPE_KEY = "glow_skin_type_result";
@@ -114,24 +114,67 @@ const skinTypeDescriptions: Record<string, { title: string; desc: string; tips: 
   },
 };
 
+// Veritabanında sadece title/desc saklıyoruz; tips listesini title'a göre
+// yeniden buluyoruz (aynı title her zaman aynı tips setine karşılık gelir).
+function findDescriptionByTitle(title: string) {
+  return Object.values(skinTypeDescriptions).find((d) => d.title === title) || null;
+}
+
 export function CiltTipiniOgren() {
   const [currentStep, setCurrentStep] = useState(0);
   const [answers, setAnswers] = useState<Record<number, string>>({});
   const [result, setResult] = useState<{ title: string; desc: string; tips: string[] } | null>(null);
   const [saving, setSaving] = useState(false);
+  const [checkingExisting, setCheckingExisting] = useState(true);
 
   useEffect(() => {
-    if (typeof localStorage !== "undefined") {
-      try {
-        const saved = localStorage.getItem(SKIN_TYPE_KEY);
-        if (saved) {
-          const parsed = JSON.parse(saved);
-          if (skinTypeDescriptions[parsed.title]) {
-            setResult(skinTypeDescriptions[parsed.title]);
+    async function loadExistingResult() {
+      setCheckingExisting(true);
+
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+
+      if (session?.user) {
+        // Giriş yapmış kullanıcı: SADECE bu hesabın Supabase'deki son
+        // test sonucunu göster. Başka bir hesabın ya da bu tarayıcının
+        // eski localStorage verisi asla gösterilmez.
+        const { data, error } = await supabase
+          .from("quiz_results")
+          .select("result_title, result_desc")
+          .eq("user_id", session.user.id)
+          .order("created_at", { ascending: false })
+          .limit(1)
+          .maybeSingle();
+
+        if (!error && data && data.result_title) {
+          const found = findDescriptionByTitle(data.result_title);
+          if (found) {
+            setResult(found);
+          } else {
+            // Eşleşme bulunamazsa (beklenmedik durum) en azından
+            // veritabanındaki başlık/açıklamayı göster.
+            setResult({ title: data.result_title, desc: data.result_desc || "", tips: [] });
           }
         }
-      } catch {}
+      } else {
+        // Giriş yapmamış ziyaretçi: sadece bu tarayıcıdaki geçici sonucu göster.
+        if (typeof localStorage !== "undefined") {
+          try {
+            const saved = localStorage.getItem(SKIN_TYPE_KEY);
+            if (saved) {
+              const parsed = JSON.parse(saved);
+              const found = findDescriptionByTitle(parsed.title);
+              if (found) setResult(found);
+            }
+          } catch {}
+        }
+      }
+
+      setCheckingExisting(false);
     }
+
+    loadExistingResult();
   }, []);
 
   const handleSelectOption = (optionType: string) => {
@@ -164,22 +207,23 @@ export function CiltTipiniOgren() {
     const finalResultData = skinTypeDescriptions[highestType] || skinTypeDescriptions["Karma"];
     setResult(finalResultData);
 
-    const resultPayload = {
-      title: finalResultData.title,
-      desc: finalResultData.desc,
-    };
-
     if (typeof localStorage !== "undefined") {
-      localStorage.setItem(SKIN_TYPE_KEY, JSON.stringify(resultPayload));
+      localStorage.setItem(
+        SKIN_TYPE_KEY,
+        JSON.stringify({ title: finalResultData.title, desc: finalResultData.desc })
+      );
     }
 
     try {
-      const { data: { session } } = await supabase.auth.getSession();
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
       if (session?.user) {
         await supabase.from("quiz_results").insert({
           user_id: session.user.id,
-          result_skin_type: finalResultData.title,
-          created_at: new Date().toISOString(),
+          answers: finalAnswers,
+          result_title: finalResultData.title,
+          result_desc: finalResultData.desc,
         });
       }
     } catch (e) {
@@ -196,6 +240,23 @@ export function CiltTipiniOgren() {
   };
 
   const currentQ = quizQuestions[currentStep];
+
+  if (checkingExisting) {
+    return (
+      <>
+        <PageHero
+          title="Cilt Tipini Öğren"
+          subtitle="Birkaç kısa soruyla cildinin ihtiyaçlarını keşfet ve sana en uygun bakımı planla."
+          image="https://images.unsplash.com/photo-1556228720-195a672e8a03?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&q=80&w=1600"
+        />
+        <section className="px-6 md:px-[100px] py-16 md:py-24 bg-[#F3F1ED] flex justify-center">
+          <p className="text-[#5E5954]" style={{ fontFamily: "Geist" }}>
+            Yükleniyor...
+          </p>
+        </section>
+      </>
+    );
+  }
 
   return (
     <>
@@ -225,21 +286,23 @@ export function CiltTipiniOgren() {
                 </p>
               </div>
 
-              <div className="bg-[#F8F7F4] rounded-xl p-6 border border-[#EAE7E2] flex flex-col gap-4">
-                <h3 className="text-[#1C1A17] text-lg font-medium" style={{ fontFamily: "Lora" }}>
-                  Sana Özel Tavsiyeler
-                </h3>
-                <ul className="flex flex-col gap-3">
-                  {result.tips.map((tip, idx) => (
-                    <li key={idx} className="flex items-start gap-3 text-[#5E5954] text-sm md:text-base" style={{ fontFamily: "Geist" }}>
-                      <span className="w-5 h-5 rounded-full bg-[#7A8B6F] text-white flex items-center justify-center text-xs shrink-0 mt-0.5">
-                        ✓
-                      </span>
-                      <span>{tip}</span>
-                    </li>
-                  ))}
-                </ul>
-              </div>
+              {result.tips.length > 0 && (
+                <div className="bg-[#F8F7F4] rounded-xl p-6 border border-[#EAE7E2] flex flex-col gap-4">
+                  <h3 className="text-[#1C1A17] text-lg font-medium" style={{ fontFamily: "Lora" }}>
+                    Sana Özel Tavsiyeler
+                  </h3>
+                  <ul className="flex flex-col gap-3">
+                    {result.tips.map((tip, idx) => (
+                      <li key={idx} className="flex items-start gap-3 text-[#5E5954] text-sm md:text-base" style={{ fontFamily: "Geist" }}>
+                        <span className="w-5 h-5 rounded-full bg-[#7A8B6F] text-white flex items-center justify-center text-xs shrink-0 mt-0.5">
+                          ✓
+                        </span>
+                        <span>{tip}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
 
               <div className="flex flex-col sm:flex-row items-center justify-between gap-4 border-t border-[#EAE7E2] pt-6">
                 <p className="text-xs text-[#8C857B]" style={{ fontFamily: "Geist" }}>

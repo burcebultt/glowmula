@@ -1,8 +1,6 @@
 import { useState, useEffect } from "react";
 import { PageHero } from "../components/PageHero";
 import { Heart, ChevronLeft, ChevronRight, Plus, LogOut, Mail, KeyRound, Trash2 } from "lucide-react";
-import { ingredientNameById } from "./Skin101";
-import { recipeInfoById } from "./KendinYap";
 import { supabase } from "../../supabaseClient";
 
 interface RoutineItem {
@@ -494,36 +492,58 @@ function Dashboard({ userName, userId, onLogout }: { userName: string; userId: s
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [calendarDate]);
 
-  // Bu fonksiyon artık SADECE Supabase'den okuyor — localStorage yedeği yok.
-  // Böylece her hesap yalnızca kendi favorilerini/cilt tipini görür; yeni bir
-  // hesapla giriş yapan biri başka bir hesabın (ya da bu tarayıcının eski)
-  // verisini asla görmez.
+  // Bu fonksiyon artık ingredientNameById/recipeInfoById gibi başka sayfalarda
+  // dolan geçici (bellekteki) listelere bağımlı DEĞİL — isimleri doğrudan
+  // Supabase'deki ingredients/recipes tablolarından çekiyor. Böylece Skin101
+  // ya da KendinYap sayfasına hiç girmemiş olsan bile favoriler doğru görünür.
   const loadUserData = async () => {
     try {
-      const { data: ingData, error } = await supabase
+      const { data: favIngRows, error } = await supabase
         .from("favorites")
         .select("item_id")
         .eq("user_id", userId)
         .eq("item_type", "ingredient");
-
       if (error) throw error;
-      const names = (ingData || []).map((d) => ingredientNameById[d.item_id]).filter(Boolean);
-      setFavIngredients(names);
+
+      const ids = (favIngRows || []).map((r) => r.item_id);
+      if (ids.length > 0) {
+        const { data: ingRows, error: ingErr } = await supabase
+          .from("ingredients")
+          .select("id, name")
+          .in("id", ids);
+        if (ingErr) throw ingErr;
+        setFavIngredients((ingRows || []).map((r: any) => r.name).filter(Boolean));
+      } else {
+        setFavIngredients([]);
+      }
     } catch (err) {
       console.error("Favori içerikler yüklenirken hata:", err);
       setFavIngredients([]);
     }
 
     try {
-      const { data: recData, error } = await supabase
+      const { data: favRecRows, error } = await supabase
         .from("favorites")
         .select("item_id")
         .eq("user_id", userId)
         .eq("item_type", "recipe");
-
       if (error) throw error;
-      const recipes = (recData || []).map((d) => recipeInfoById[d.item_id]).filter(Boolean);
-      setFavRecipes(recipes);
+
+      const ids = (favRecRows || []).map((r) => r.item_id);
+      if (ids.length > 0) {
+        const { data: recRows, error: recErr } = await supabase
+          .from("recipes")
+          .select("id, name, category")
+          .in("id", ids);
+        if (recErr) throw recErr;
+        setFavRecipes(
+          (recRows || [])
+            .map((r: any) => ({ name: r.name, category: r.category }))
+            .filter((r: any) => r.name)
+        );
+      } else {
+        setFavRecipes([]);
+      }
     } catch (err) {
       console.error("Favori tarifler yüklenirken hata:", err);
       setFavRecipes([]);
