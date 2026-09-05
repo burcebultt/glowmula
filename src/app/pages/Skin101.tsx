@@ -77,12 +77,9 @@ export function Skin101() {
           localStorage.setItem(FAV_KEY, JSON.stringify(favIds));
         }
       } else {
-        try {
-          const localFavs = JSON.parse(localStorage.getItem(FAV_KEY) || "[]");
-          setFavorites(localFavs.map(String));
-        } catch {
-          setFavorites([]);
-        }
+        // Giriş yapılmamışsa favori gösterilmez; eski cihaz verisi varsa temizle
+        localStorage.removeItem(FAV_KEY);
+        setFavorites([]);
       }
 
       setLoading(false);
@@ -92,6 +89,11 @@ export function Skin101() {
   }, []);
 
   const toggleFavorite = async (id: string) => {
+    if (!user) {
+      alert("Favorilere eklemek için giriş yapmalısın.");
+      return;
+    }
+
     const stringId = String(id);
     const isFav = favorites.includes(stringId);
     const nextFavorites = isFav
@@ -103,25 +105,23 @@ export function Skin101() {
     localStorage.setItem(FAV_KEY, JSON.stringify(nextFavorites));
 
     // Supabase Senkronizasyonu
-    if (user) {
-      if (isFav) {
-        await supabase
-          .from("favorites")
-          .delete()
-          .eq("user_id", user.id)
-          .eq("item_id", stringId)
-          .eq("item_type", "ingredient");
-      } else {
-        await supabase
-          .from("favorites")
-          .insert([
-            {
-              user_id: user.id,
-              item_id: stringId,
-              item_type: "ingredient",
-            },
-          ]);
-      }
+    if (isFav) {
+      await supabase
+        .from("favorites")
+        .delete()
+        .eq("user_id", user.id)
+        .eq("item_id", stringId)
+        .eq("item_type", "ingredient");
+    } else {
+      await supabase
+        .from("favorites")
+        .insert([
+          {
+            user_id: user.id,
+            item_id: stringId,
+            item_type: "ingredient",
+          },
+        ]);
     }
   };
 

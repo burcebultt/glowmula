@@ -133,6 +133,7 @@ export function CiltTipiniOgren() {
   const [result, setResult] = useState<{ title: string; desc: string; tips: string[] } | null>(null);
   const [saving, setSaving] = useState(false);
   const [checkingExisting, setCheckingExisting] = useState(true);
+  const [isLoggedIn, setIsLoggedIn] = useState(false);
 
   useEffect(() => {
     async function loadExistingResult() {
@@ -143,6 +144,8 @@ export function CiltTipiniOgren() {
       } = await supabase.auth.getSession();
 
       if (session?.user) {
+        setIsLoggedIn(true);
+
         // Giriş yapmış kullanıcı: SADECE bu hesabın Supabase'deki son
         // test sonucunu göster. Başka bir hesabın ya da bu tarayıcının
         // eski localStorage verisi asla gösterilmez.
@@ -165,16 +168,10 @@ export function CiltTipiniOgren() {
           }
         }
       } else {
-        // Giriş yapmamış ziyaretçi: sadece bu tarayıcıdaki geçici sonucu göster.
+        setIsLoggedIn(false);
+        // Giriş yapılmamışsa önceki sonuç gösterilmez; eski cihaz verisi varsa temizle
         if (typeof localStorage !== "undefined") {
-          try {
-            const saved = localStorage.getItem(SKIN_TYPE_KEY);
-            if (saved) {
-              const parsed = JSON.parse(saved);
-              const found = findDescriptionByTitle(parsed.title);
-              if (found) setResult(found);
-            }
-          } catch {}
+          localStorage.removeItem(SKIN_TYPE_KEY);
         }
       }
 
@@ -214,24 +211,20 @@ export function CiltTipiniOgren() {
     const finalResultData = skinTypeDescriptions[highestType] || skinTypeDescriptions["Karma"];
     setResult(finalResultData);
 
-    if (typeof localStorage !== "undefined") {
-      localStorage.setItem(
-        SKIN_TYPE_KEY,
-        JSON.stringify({ title: finalResultData.title, desc: finalResultData.desc })
-      );
-    }
-
     try {
       const {
         data: { session },
       } = await supabase.auth.getSession();
       if (session?.user) {
+        setIsLoggedIn(true);
         await supabase.from("quiz_results").insert({
           user_id: session.user.id,
           answers: finalAnswers,
           result_title: finalResultData.title,
           result_desc: finalResultData.desc,
         });
+      } else {
+        setIsLoggedIn(false);
       }
     } catch (e) {
       console.error("Test sonucu Supabase'e kaydedilirken hata oluştu:", e);
@@ -244,6 +237,9 @@ export function CiltTipiniOgren() {
     setCurrentStep(0);
     setAnswers({});
     setResult(null);
+    if (typeof localStorage !== "undefined") {
+      localStorage.removeItem(SKIN_TYPE_KEY);
+    }
   };
 
   const currentQ = quizQuestions[currentStep];
@@ -313,7 +309,11 @@ export function CiltTipiniOgren() {
 
               <div className="flex flex-col sm:flex-row items-center justify-between gap-4 border-t border-[#EAE7E2] pt-6">
                 <p className="text-xs text-[#8C857B]" style={{ fontFamily: "Geist" }}>
-                  {saving ? "Günlüğünle senkronize ediliyor..." : "Bu bilgi Günlüğüm sayfandaki profiline otomatik kaydedildi."}
+                  {isLoggedIn
+                    ? saving
+                      ? "Günlüğünle senkronize ediliyor..."
+                      : "Bu bilgi Günlüğüm sayfandaki profiline otomatik kaydedildi."
+                    : "Sonucun kaydedilmesi için giriş yapmalısın."}
                 </p>
                 <button
                   onClick={restartQuiz}

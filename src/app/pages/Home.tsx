@@ -1,4 +1,5 @@
 import { Link } from "react-router";
+import { useEffect, useRef, useState } from "react";
 import { ImageWithFallback } from "../components/figma/ImageWithFallback";
 
 const heroImg =
@@ -26,7 +27,69 @@ const categories = [
   },
 ];
 
+// Scroll'a girince beliren efekt için küçük bir hook
+function useFadeIn<T extends HTMLElement>(threshold = 0.2) {
+  const ref = useRef<T>(null);
+  const [isVisible, setIsVisible] = useState(false);
+
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (entry.isIntersecting) {
+          setIsVisible(true);
+          observer.unobserve(el);
+        }
+      },
+      { threshold }
+    );
+
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [threshold]);
+
+  return {
+    ref,
+    className: `transition-all duration-700 ease-out ${
+      isVisible ? "opacity-100 translate-y-0" : "opacity-0 translate-y-8"
+    }`,
+  };
+}
+
+// Kategori kartları için ayrı component (her biri kendi ref'ine ve gecikmesine sahip)
+function CategoryCard({ cat, index }: { cat: (typeof categories)[number]; index: number }) {
+  const { ref, className } = useFadeIn<HTMLAnchorElement>();
+
+  return (
+    <Link
+      ref={ref}
+      to={cat.to}
+      className={`group relative flex-1 h-[320px] rounded-2xl overflow-hidden flex items-center justify-center p-8 ${className}`}
+      style={{ transitionDelay: `${index * 120}ms` }}
+    >
+      <ImageWithFallback
+        src={cat.img}
+        alt={cat.title}
+        className="absolute inset-0 w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
+      />
+      <div className="absolute inset-0 bg-black/35 transition-colors group-hover:bg-black/45" />
+      <span
+        className="relative text-center text-white"
+        style={{ fontFamily: "Lora", fontSize: 32, fontWeight: 700 }}
+      >
+        {cat.title}
+      </span>
+    </Link>
+  );
+}
+
 export function Home() {
+  const imagesFade = useFadeIn<HTMLDivElement>();
+  const textFade = useFadeIn<HTMLDivElement>();
+  const welcomeFade = useFadeIn<HTMLDivElement>();
+
   return (
     <>
       {/* Hero */}
@@ -62,7 +125,10 @@ export function Home() {
 
       {/* Neden Glowmula */}
       <section className="px-6 md:px-[100px] py-16 md:py-[100px] bg-[#EAE7E2] flex flex-col lg:flex-row items-center gap-12 lg:gap-20">
-        <div className="flex-1 flex items-start gap-6 md:gap-8 justify-center w-full">
+        <div
+          ref={imagesFade.ref}
+          className={`flex-1 flex items-start gap-6 md:gap-8 justify-center w-full ${imagesFade.className}`}
+        >
           {[productImg1, productImg2].map((img, i) => (
             <div
               key={i}
@@ -76,7 +142,11 @@ export function Home() {
             </div>
           ))}
         </div>
-        <div className="flex-1 flex flex-col items-start gap-6">
+        <div
+          ref={textFade.ref}
+          className={`flex-1 flex flex-col items-start gap-6 ${textFade.className}`}
+          style={{ transitionDelay: "150ms" }}
+        >
           <h2 className="text-[#1C1A17]" style={{ fontFamily: "Lora", fontSize: 40, fontWeight: 400 }}>
             Neden Glowmula?
           </h2>
@@ -92,7 +162,10 @@ export function Home() {
 
       {/* Hoş geldin */}
       <section className="px-6 md:px-[100px] py-14 md:py-[60px] bg-[#D1C7BD] flex">
-        <div className="flex-1 flex flex-col items-start gap-4">
+        <div
+          ref={welcomeFade.ref}
+          className={`flex-1 flex flex-col items-start gap-4 ${welcomeFade.className}`}
+        >
           <h3 className="text-[#1C1A17]" style={{ fontFamily: "Lora", fontSize: 36, fontWeight: 400 }}>
             Hoş geldin!
           </h3>
@@ -108,25 +181,8 @@ export function Home() {
 
       {/* Kategoriler */}
       <section className="px-6 md:px-[100px] py-16 md:py-[100px] flex flex-col md:flex-row items-stretch gap-8">
-        {categories.map((cat) => (
-          <Link
-            key={cat.title}
-            to={cat.to}
-            className="group relative flex-1 h-[320px] rounded-2xl overflow-hidden flex items-center justify-center p-8"
-          >
-            <ImageWithFallback
-              src={cat.img}
-              alt={cat.title}
-              className="absolute inset-0 w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
-            />
-            <div className="absolute inset-0 bg-black/35 transition-colors group-hover:bg-black/45" />
-            <span
-              className="relative text-center text-white"
-              style={{ fontFamily: "Lora", fontSize: 32, fontWeight: 700 }}
-            >
-              {cat.title}
-            </span>
-          </Link>
+        {categories.map((cat, i) => (
+          <CategoryCard key={cat.title} cat={cat} index={i} />
         ))}
       </section>
     </>
