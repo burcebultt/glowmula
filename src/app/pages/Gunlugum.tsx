@@ -469,9 +469,14 @@ function Dashboard({ userName, userId, onLogout }: { userName: string; userId: s
 
   const todayStr = new Date().toISOString().slice(0, 10);
 
+  // Takvimde tıklanan gün. Varsayılan olarak bugün.
+  const [selectedDate, setSelectedDate] = useState<string>(todayStr);
+  const isViewingToday = selectedDate === todayStr;
+
   const [morning, setMorning] = useState<RoutineItem[]>([]);
   const [evening, setEvening] = useState<RoutineItem[]>([]);
   const [loadingRoutines, setLoadingRoutines] = useState(true);
+  const [hasRoutineData, setHasRoutineData] = useState(true);
 
   const [noteDraft, setNoteDraft] = useState("");
   const [notes, setNotes] = useState<{ id: string; date: string; text: string }[]>([]);
@@ -482,10 +487,14 @@ function Dashboard({ userName, userId, onLogout }: { userName: string; userId: s
 
   useEffect(() => {
     loadUserData();
-    loadRoutinesForToday();
     loadNotes();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [userId]);
+
+  useEffect(() => {
+    loadRoutinesForDate(selectedDate);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedDate]);
 
   useEffect(() => {
     loadMonthStatus(calendarDate);
@@ -588,13 +597,16 @@ function Dashboard({ userName, userId, onLogout }: { userName: string; userId: s
     );
   }
 
-  async function loadRoutinesForToday() {
+  // Seçili günün (bugün ya da geçmiş bir gün) rutinini çeker.
+  // Sadece BUGÜN için veri yoksa varsayılan liste oluşturulur;
+  // geçmiş bir günde hiç kayıt yoksa boş/"kayıt yok" durumu gösterilir.
+  async function loadRoutinesForDate(dateStr: string) {
     setLoadingRoutines(true);
     const { data, error } = await supabase
       .from("routine_items")
       .select("*")
       .eq("user_id", userId)
-      .eq("entry_date", todayStr)
+      .eq("entry_date", dateStr)
       .order("sort_order", { ascending: true });
 
     if (error) {
@@ -604,40 +616,49 @@ function Dashboard({ userName, userId, onLogout }: { userName: string; userId: s
     }
 
     if (!data || data.length === 0) {
-      const seedRows = [
-        ...DEFAULT_MORNING.map((label, i) => ({
-          user_id: userId,
-          entry_date: todayStr,
-          period: "morning",
-          label,
-          done: false,
-          sort_order: i,
-        })),
-        ...DEFAULT_EVENING.map((label, i) => ({
-          user_id: userId,
-          entry_date: todayStr,
-          period: "evening",
-          label,
-          done: false,
-          sort_order: i,
-        })),
-      ];
-      const { data: inserted, error: insertError } = await supabase
-        .from("routine_items")
-        .insert(seedRows)
-        .select();
-      if (insertError) {
-        console.error("Varsayılan rutin oluşturulurken hata:", insertError);
+      if (dateStr === todayStr) {
+        const seedRows = [
+          ...DEFAULT_MORNING.map((label, i) => ({
+            user_id: userId,
+            entry_date: dateStr,
+            period: "morning",
+            label,
+            done: false,
+            sort_order: i,
+          })),
+          ...DEFAULT_EVENING.map((label, i) => ({
+            user_id: userId,
+            entry_date: dateStr,
+            period: "evening",
+            label,
+            done: false,
+            sort_order: i,
+          })),
+        ];
+        const { data: inserted, error: insertError } = await supabase
+          .from("routine_items")
+          .insert(seedRows)
+          .select();
+        if (insertError) {
+          console.error("Varsayılan rutin oluşturulurken hata:", insertError);
+        } else {
+          applyRoutineRows(inserted || []);
+          setHasRoutineData(true);
+        }
       } else {
-        applyRoutineRows(inserted || []);
+        setMorning([]);
+        setEvening([]);
+        setHasRoutineData(false);
       }
     } else {
       applyRoutineRows(data);
+      setHasRoutineData(true);
     }
     setLoadingRoutines(false);
   }
 
   async function toggleRoutineItem(id: string, period: "morning" | "evening") {
+    if (!isViewingToday) return; // Geçmiş günler salt okunur
     const list = period === "morning" ? morning : evening;
     const item = list.find((it) => it.id === id);
     if (!item) return;
@@ -651,6 +672,7 @@ function Dashboard({ userName, userId, onLogout }: { userName: string; userId: s
   }
 
   async function addRoutineItem(period: "morning" | "evening", label: string) {
+    if (!isViewingToday) return;
     const list = period === "morning" ? morning : evening;
     const { data, error } = await supabase
       .from("routine_items")
@@ -674,6 +696,7 @@ function Dashboard({ userName, userId, onLogout }: { userName: string; userId: s
   }
 
   async function deleteRoutineItem(id: string, period: "morning" | "evening") {
+    if (!isViewingToday) return;
     const updater = period === "morning" ? setMorning : setEvening;
     // Anlık kaldır, kullanıcı beklemesin
     updater((prev) => prev.filter((it) => it.id !== id));
@@ -774,6 +797,12 @@ function Dashboard({ userName, userId, onLogout }: { userName: string; userId: s
     });
     setMonthStatus(status);
   }
+
+  const selectedDateLabel = new Date(selectedDate + "T00:00:00").toLocaleDateString("tr-TR", {
+    day: "numeric",
+    month: "long",
+    year: "numeric",
+  });
 
   return (
     <section className="px-6 md:px-[100px] py-16 md:py-20 bg-[#F3F1ED]">
@@ -905,16 +934,42 @@ function Dashboard({ userName, userId, onLogout }: { userName: string; userId: s
             calendarDate={calendarDate}
             onPrev={goPrevMonth}
             onNext={goNextMonth}
+            selectedDate={selectedDate}
+            onSelectDay={(dateStr) => setSelectedDate(dateStr)}
           />
 
           <div>
-            <h3 className="text-[#1C1A17] mb-4" style={{ fontFamily: "Lora", fontSize: 22, fontWeight: 500 }}>
-              Bugünün Rutini
-            </h3>
+            <div className="flex items-center justify-between gap-3 mb-4">
+              <h3 className="text-[#1C1A17]" style={{ fontFamily: "Lora", fontSize: 22, fontWeight: 500 }}>
+                {isViewingToday ? "Bugünün Rutini" : `${selectedDateLabel} Rutini`}
+              </h3>
+              {!isViewingToday && (
+                <button
+                  onClick={() => setSelectedDate(todayStr)}
+                  className="text-[#1C1A17] underline underline-offset-2"
+                  style={{ fontFamily: "Geist", fontSize: 13, fontWeight: 500 }}
+                >
+                  Bugüne dön
+                </button>
+              )}
+            </div>
+
+            {!isViewingToday && (
+              <p className="mb-4 text-[#5E5954]" style={{ fontFamily: "Geist", fontSize: 13 }}>
+                Geçmiş günler salt okunurdur; sadece o gün neler yaptığını görebilirsin.
+              </p>
+            )}
+
             {loadingRoutines ? (
               <p className="text-[#5E5954]" style={{ fontFamily: "Geist", fontSize: 14 }}>
                 Yükleniyor...
               </p>
+            ) : !isViewingToday && !hasRoutineData ? (
+              <div className="bg-white rounded-2xl border border-[#DDD9D4] p-6">
+                <p className="text-[#5E5954]" style={{ fontFamily: "Geist", fontSize: 14 }}>
+                  Bu gün için herhangi bir rutin kaydı yok.
+                </p>
+              </div>
             ) : (
               <div className="grid gap-6 md:grid-cols-2">
                 <RoutineCard
@@ -924,6 +979,7 @@ function Dashboard({ userName, userId, onLogout }: { userName: string; userId: s
                   onToggle={(id) => toggleRoutineItem(id, "morning")}
                   onAdd={(label) => addRoutineItem("morning", label)}
                   onDelete={(id) => deleteRoutineItem(id, "morning")}
+                  readOnly={!isViewingToday}
                 />
                 <RoutineCard
                   title="Akşam Rutini"
@@ -932,6 +988,7 @@ function Dashboard({ userName, userId, onLogout }: { userName: string; userId: s
                   onToggle={(id) => toggleRoutineItem(id, "evening")}
                   onAdd={(label) => addRoutineItem("evening", label)}
                   onDelete={(id) => deleteRoutineItem(id, "evening")}
+                  readOnly={!isViewingToday}
                 />
               </div>
             )}
@@ -1003,11 +1060,15 @@ function Calendar({
   calendarDate,
   onPrev,
   onNext,
+  selectedDate,
+  onSelectDay,
 }: {
   monthStatus: Record<string, "full" | "partial">;
   calendarDate: Date;
   onPrev: () => void;
   onNext: () => void;
+  selectedDate: string;
+  onSelectDay: (dateStr: string) => void;
 }) {
   const year = calendarDate.getFullYear();
   const month = calendarDate.getMonth();
@@ -1059,12 +1120,21 @@ function Calendar({
           if (d === null) return <span key={`e${i}`} />;
           const dateStr = `${year}-${String(month + 1).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
           const isToday = dateStr === todayStr;
+          const isSelected = dateStr === selectedDate;
           const status = monthStatus[dateStr];
           return (
-            <div key={d} className="flex flex-col items-center gap-1 py-1.5">
+            <button
+              key={d}
+              onClick={() => onSelectDay(dateStr)}
+              className="flex flex-col items-center gap-1 py-1.5 cursor-pointer"
+            >
               <span
-                className={`w-8 h-8 flex items-center justify-center rounded-full text-[#1C1A17] ${
-                  isToday ? "border border-[#1C1A17]" : ""
+                className={`w-8 h-8 flex items-center justify-center rounded-full transition-colors ${
+                  isSelected
+                    ? "bg-[#1C1A17] text-white"
+                    : isToday
+                    ? "border border-[#1C1A17] text-[#1C1A17]"
+                    : "text-[#1C1A17] hover:bg-[#EAE7E2]"
                 }`}
                 style={{ fontFamily: "Geist", fontSize: 14 }}
               >
@@ -1076,7 +1146,7 @@ function Calendar({
                   background: status === "full" ? "#7A8B6F" : status === "partial" ? "#C7A15A" : "transparent",
                 }}
               />
-            </div>
+            </button>
           );
         })}
       </div>
@@ -1087,6 +1157,10 @@ function Calendar({
         <span className="inline-flex items-center gap-2 text-[#5E5954]" style={{ fontFamily: "Geist", fontSize: 12 }}>
           <span className="w-3 h-3 rounded-full border border-[#1C1A17]" />
           Halka = Bugün
+        </span>
+        <span className="inline-flex items-center gap-2 text-[#5E5954]" style={{ fontFamily: "Geist", fontSize: 12 }}>
+          <span className="w-3 h-3 rounded-full bg-[#1C1A17]" />
+          Dolu = Seçili Gün
         </span>
       </div>
     </div>
@@ -1109,6 +1183,7 @@ function RoutineCard({
   onToggle,
   onAdd,
   onDelete,
+  readOnly = false,
 }: {
   title: string;
   emoji: string;
@@ -1116,6 +1191,7 @@ function RoutineCard({
   onToggle: (id: string) => void;
   onAdd: (label: string) => void;
   onDelete: (id: string) => void;
+  readOnly?: boolean;
 }) {
   const [value, setValue] = useState("");
 
@@ -1147,9 +1223,18 @@ function RoutineCard({
       </div>
 
       <div className="flex flex-col gap-2.5">
+        {items.length === 0 && (
+          <p className="text-[#9A948D]" style={{ fontFamily: "Geist", fontSize: 13 }}>
+            Bu gün için ürün eklenmemiş.
+          </p>
+        )}
         {items.map((it) => (
           <div key={it.id} className="flex items-center gap-2.5 group">
-            <label className="flex items-center gap-2.5 cursor-pointer select-none flex-1 min-w-0">
+            <label
+              className={`flex items-center gap-2.5 flex-1 min-w-0 select-none ${
+                readOnly ? "cursor-default" : "cursor-pointer"
+              }`}
+            >
               <span
                 className={`w-4 h-4 rounded border flex items-center justify-center transition-colors shrink-0 ${
                   it.done ? "bg-[#1C1A17] border-[#1C1A17]" : "border-[#C4BEB6] bg-white"
@@ -1161,7 +1246,13 @@ function RoutineCard({
                   </svg>
                 )}
               </span>
-              <input type="checkbox" className="sr-only" checked={it.done} onChange={() => onToggle(it.id)} />
+              <input
+                type="checkbox"
+                className="sr-only"
+                checked={it.done}
+                disabled={readOnly}
+                onChange={() => onToggle(it.id)}
+              />
               <span
                 className={`truncate ${it.done ? "text-[#1C1A17]" : "text-[#5E5954]"}`}
                 style={{ fontFamily: "Geist", fontSize: 14 }}
@@ -1169,34 +1260,38 @@ function RoutineCard({
                 {it.label}
               </span>
             </label>
-            <button
-              onClick={() => onDelete(it.id)}
-              className="text-[#C4BEB6] hover:text-[#C0392B] transition-colors shrink-0"
-              aria-label="Rutin maddesini sil"
-            >
-              <Trash2 size={15} />
-            </button>
+            {!readOnly && (
+              <button
+                onClick={() => onDelete(it.id)}
+                className="text-[#C4BEB6] hover:text-[#C0392B] transition-colors shrink-0"
+                aria-label="Rutin maddesini sil"
+              >
+                <Trash2 size={15} />
+              </button>
+            )}
           </div>
         ))}
       </div>
 
-      <div className="flex items-center gap-2 pt-2">
-        <input
-          value={value}
-          onChange={(e) => setValue(e.target.value)}
-          onKeyDown={(e) => e.key === "Enter" && add()}
-          placeholder="Ürün adı yazın..."
-          className="flex-1 min-w-0 rounded-lg border border-[#DDD9D4] bg-[#F3F1ED] px-3 py-2 text-[#1C1A17] outline-none focus:border-[#1C1A17] transition-colors"
-          style={{ fontFamily: "Geist", fontSize: 13 }}
-        />
-        <button
-          onClick={add}
-          className="inline-flex items-center gap-1 shrink-0 whitespace-nowrap bg-[#7A8B6F] text-white px-3.5 py-2 rounded-lg hover:opacity-90 transition-opacity"
-          style={{ fontFamily: "Geist", fontSize: 13, fontWeight: 500 }}
-        >
-          <Plus size={14} /> Ekle
-        </button>
-      </div>
+      {!readOnly && (
+        <div className="flex items-center gap-2 pt-2">
+          <input
+            value={value}
+            onChange={(e) => setValue(e.target.value)}
+            onKeyDown={(e) => e.key === "Enter" && add()}
+            placeholder="Ürün adı yazın..."
+            className="flex-1 min-w-0 rounded-lg border border-[#DDD9D4] bg-[#F3F1ED] px-3 py-2 text-[#1C1A17] outline-none focus:border-[#1C1A17] transition-colors"
+            style={{ fontFamily: "Geist", fontSize: 13 }}
+          />
+          <button
+            onClick={add}
+            className="inline-flex items-center gap-1 shrink-0 whitespace-nowrap bg-[#7A8B6F] text-white px-3.5 py-2 rounded-lg hover:opacity-90 transition-opacity"
+            style={{ fontFamily: "Geist", fontSize: 13, fontWeight: 500 }}
+          >
+            <Plus size={14} /> Ekle
+          </button>
+        </div>
+      )}
     </div>
   );
 }
