@@ -78,14 +78,7 @@ export const recipeInfoById: Record<string, { name: string; category: string }> 
 export function KendinYap() {
   const [recipes, setRecipes] = useState<Recipe[]>([]);
   const [loading, setLoading] = useState(true);
-  const [selectedPantry, setSelectedPantry] = useState<string[]>([
-    "Bal",
-    "Yoğurt",
-    "Avokado",
-    "Salatalık",
-    "Zerdeçal",
-    "Aloe Vera",
-  ]);
+  const [selectedPantry, setSelectedPantry] = useState<string[]>([]);
   const [user, setUser] = useState<any>(null);
   const [favorites, setFavorites] = useState<string[]>([]);
   const [active, setActive] = useState<Recipe | null>(null);
@@ -136,7 +129,7 @@ export function KendinYap() {
         });
       }
 
-      // 3. Favorileri çek
+      // 3. Favori tarifleri çek
       if (currentUser) {
         const { data: favData, error: favError } = await supabase
           .from("favorites")
@@ -149,9 +142,24 @@ export function KendinYap() {
           setFavorites(favIds);
           localStorage.setItem(FAV_RECIPES_KEY, JSON.stringify(favIds));
         }
+
+        // 4. Dolabım (pantry) seçimlerini çek — sadece bu kullanıcıya ait
+        const { data: pantryData, error: pantryError } = await supabase
+          .from("favorites")
+          .select("item_id")
+          .eq("user_id", currentUser.id)
+          .eq("item_type", "pantry");
+
+        if (!pantryError && pantryData) {
+          setSelectedPantry(pantryData.map((p: any) => String(p.item_id)));
+        } else {
+          setSelectedPantry([]);
+        }
       } else {
+        // Giriş yapılmamışsa hiçbir malzeme işaretli gelmez, eski veri temizlenir
         localStorage.removeItem(FAV_RECIPES_KEY);
         setFavorites([]);
+        setSelectedPantry([]);
       }
 
       setLoading(false);
@@ -160,10 +168,35 @@ export function KendinYap() {
     initData();
   }, []);
 
-  const togglePantry = (name: string) =>
-    setSelectedPantry((prev) =>
-      prev.includes(name) ? prev.filter((x) => x !== name) : [...prev, name]
-    );
+  const togglePantry = async (name: string) => {
+    const isSelected = selectedPantry.includes(name);
+    const nextPantry = isSelected
+      ? selectedPantry.filter((x) => x !== name)
+      : [...selectedPantry, name];
+
+    // Ekranı anında güncelle (giriş yapılmasa da çalışsın, sadece kaydedilmesin)
+    setSelectedPantry(nextPantry);
+
+    // Sadece giriş yapılmışsa Supabase'e kaydet
+    if (user) {
+      if (isSelected) {
+        await supabase
+          .from("favorites")
+          .delete()
+          .eq("user_id", user.id)
+          .eq("item_id", name)
+          .eq("item_type", "pantry");
+      } else {
+        await supabase.from("favorites").insert([
+          {
+            user_id: user.id,
+            item_id: name,
+            item_type: "pantry",
+          },
+        ]);
+      }
+    }
+  };
 
   const toggleFavorite = async (id: string) => {
     if (!user) {
@@ -340,8 +373,9 @@ export function KendinYap() {
                 </span>
               </div>
               <p className="text-[#5E5954]" style={{ fontFamily: "Geist", fontSize: 13, lineHeight: "21px" }}>
-                Evinde bulunan malzemeleri aşağıdan işaretle, elindekilerle yapabileceğin tariflerdeki
-                eşleşmeleri anında takip et.
+                {user
+                  ? "Evinde bulunan malzemeleri aşağıdan işaretle, elindekilerle yapabileceğin tariflerdeki eşleşmeleri anında takip et."
+                  : "Malzemeleri işaretleyip tarifleri deneyebilirsin; seçimlerinin kaydedilmesi için giriş yapmalısın."}
               </p>
 
               {pantry.map((cat) => (
