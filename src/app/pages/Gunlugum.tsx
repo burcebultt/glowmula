@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
+import { useNavigate } from "react-router";
 import { PageHero } from "../components/PageHero";
-import { Heart, ChevronLeft, ChevronRight, Plus, LogOut, Mail, KeyRound, Trash2 } from "lucide-react";
+import { Heart, ChevronLeft, ChevronRight, Plus, LogOut, Mail, KeyRound, Trash2, Eye, EyeOff } from "lucide-react";
 import { supabase } from "../../supabaseClient";
 
 interface RoutineItem {
@@ -93,12 +94,16 @@ export function Gunlugum() {
 type AuthMode = "login" | "signup" | "forgot" | "sent" | "reset";
 
 function AuthGate({ recoveryMode }: { recoveryMode: boolean }) {
+  const navigate = useNavigate();
   const [mode, setMode] = useState<AuthMode>(recoveryMode ? "reset" : "login");
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [newPassword2, setNewPassword2] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
+  const [showNewPassword, setShowNewPassword] = useState(false);
+  const [showNewPassword2, setShowNewPassword2] = useState(false);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const [sentMessage, setSentMessage] = useState("");
@@ -137,6 +142,9 @@ function AuthGate({ recoveryMode }: { recoveryMode: boolean }) {
           "Hesabını doğrulaman için sana bir e-posta gönderdik. Gelen kutunu kontrol edip bağlantıya tıkla."
         );
         setMode("sent");
+      } else {
+        // E-posta onayı gerekmiyorsa kullanıcı direkt giriş yapmış olur; ana sayfaya yönlendir.
+        navigate("/");
       }
     } else {
       const { error } = await supabase.auth.signInWithPassword({
@@ -269,14 +277,24 @@ function AuthGate({ recoveryMode }: { recoveryMode: boolean }) {
                     </button>
                   )}
                 </div>
-                <input
-                  type="password"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  placeholder="••••••••"
-                  className={inputCls}
-                  style={{ fontFamily: "Geist", fontSize: 15 }}
-                />
+                <div className="relative">
+                  <input
+                    type={showPassword ? "text" : "password"}
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    placeholder="••••••••"
+                    className={`${inputCls} pr-11`}
+                    style={{ fontFamily: "Geist", fontSize: 15 }}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword((v) => !v)}
+                    className="absolute right-3.5 top-1/2 -translate-y-1/2 text-[#5E5954] hover:text-[#1C1A17] transition-colors"
+                    aria-label={showPassword ? "Şifreyi gizle" : "Şifreyi göster"}
+                  >
+                    {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                  </button>
+                </div>
               </div>
 
               {error && (
@@ -410,27 +428,47 @@ function AuthGate({ recoveryMode }: { recoveryMode: boolean }) {
                 <label className="text-[#5E5954]" style={{ fontFamily: "Geist", fontSize: 13 }}>
                   Yeni Şifre
                 </label>
-                <input
-                  type="password"
-                  value={newPassword}
-                  onChange={(e) => setNewPassword(e.target.value)}
-                  placeholder="••••••••"
-                  className={inputCls}
-                  style={{ fontFamily: "Geist", fontSize: 15 }}
-                />
+                <div className="relative">
+                  <input
+                    type={showNewPassword ? "text" : "password"}
+                    value={newPassword}
+                    onChange={(e) => setNewPassword(e.target.value)}
+                    placeholder="••••••••"
+                    className={`${inputCls} pr-11`}
+                    style={{ fontFamily: "Geist", fontSize: 15 }}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowNewPassword((v) => !v)}
+                    className="absolute right-3.5 top-1/2 -translate-y-1/2 text-[#5E5954] hover:text-[#1C1A17] transition-colors"
+                    aria-label={showNewPassword ? "Şifreyi gizle" : "Şifreyi göster"}
+                  >
+                    {showNewPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                  </button>
+                </div>
               </div>
               <div className="flex flex-col gap-1.5">
                 <label className="text-[#5E5954]" style={{ fontFamily: "Geist", fontSize: 13 }}>
                   Yeni Şifre (Tekrar)
                 </label>
-                <input
-                  type="password"
-                  value={newPassword2}
-                  onChange={(e) => setNewPassword2(e.target.value)}
-                  placeholder="••••••••"
-                  className={inputCls}
-                  style={{ fontFamily: "Geist", fontSize: 15 }}
-                />
+                <div className="relative">
+                  <input
+                    type={showNewPassword2 ? "text" : "password"}
+                    value={newPassword2}
+                    onChange={(e) => setNewPassword2(e.target.value)}
+                    placeholder="••••••••"
+                    className={`${inputCls} pr-11`}
+                    style={{ fontFamily: "Geist", fontSize: 15 }}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowNewPassword2((v) => !v)}
+                    className="absolute right-3.5 top-1/2 -translate-y-1/2 text-[#5E5954] hover:text-[#1C1A17] transition-colors"
+                    aria-label={showNewPassword2 ? "Şifreyi gizle" : "Şifreyi göster"}
+                  >
+                    {showNewPassword2 ? <EyeOff size={18} /> : <Eye size={18} />}
+                  </button>
+                </div>
               </div>
               {error && (
                 <span className="text-[#C0392B]" style={{ fontFamily: "Geist", fontSize: 13 }}>
