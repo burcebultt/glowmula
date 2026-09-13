@@ -15,7 +15,7 @@ export function Root() {
   return (
     <div
       id="app-scroll"
-      className="size-full bg-white overflow-y-auto"
+      className="min-h-screen bg-white overflow-y-auto"
       style={{ fontFamily: "Geist" }}
     >
       <Header />
