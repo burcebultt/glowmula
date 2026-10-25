@@ -10,6 +10,7 @@ Glowmula; cilt tipini keşfetmen, cilt bakım içeriklerini (aktif maddeler, asi
 - **Skin101** — Cilt bakımında kullanılan aktif içerikler, asitler ve doğal özler hakkında bilimsel ve anlaşılır bilgiler. İçerikleri favorilerine ekle.
 - **Kendin Yap** — Evindeki malzemelerle hazırlayabileceğin doğal cilt bakım tarifleri. "Dolabım" özelliğiyle elindeki malzemeleri işaretle, hangi tarifleri yapabileceğini anında gör.
 - **Günlüğüm** — Sabah/akşam rutinini oluştur ve takip et, takvimden geçmiş günleri görüntüle, cilt gözlemlerini not al, favorilerini tek ekranda topla.
+- **AI Rutin Oluşturucu** — Cilt tipi testini bitirince kaç adımlık rutin istediğini seç (3, 4 ya da 5 adım), yapay zekâ cilt tipine göre sana özel sabah, akşam ve haftalık bakım rutinini hazırlasın.
 
 ## Kullanılan Teknolojiler
 
@@ -17,6 +18,7 @@ Glowmula; cilt tipini keşfetmen, cilt bakım içeriklerini (aktif maddeler, asi
 - Tailwind CSS
 - Supabase (veritabanı, kimlik doğrulama)
 - Vercel (deploy)
+-  Anthropic Claude API (AI rutin önerileri, Vercel serverless fonksiyonu ile)
 - pnpm
 
 ## Kurulum
