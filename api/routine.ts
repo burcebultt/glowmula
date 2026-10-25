@@ -1,10 +1,10 @@
+// Vercel Serverless Function: POST /api/routine
+// Proje kökünde `api/routine.ts` olarak durmalı (src içinde DEĞİL).
+
 const MODEL = "claude-haiku-5-5";
 
 const ALLOWED_SKIN = ["Yağlı Cilt", "Kuru Cilt", "Karma Cilt", "Hassas Cilt", "Normal Cilt"];
 const ALLOWED_STEPS = ["minimal", "standart", "detayli"];
-const ALLOWED_BUDGET = ["ekonomik", "orta", "premium"];
-const ALLOWED_SENS = ["yok", "hassas"];
-const ALLOWED_SUN = ["evet", "hayir"];
 
 const STEP_COUNT: Record<string, string> = {
   minimal: "sabah 3, akşam 3 adım",
@@ -12,6 +12,7 @@ const STEP_COUNT: Record<string, string> = {
   detayli: "sabah 5, akşam 5 adım",
 };
 
+// Basit rate limit (serverless'ta instance başına çalışır, tam garanti değildir).
 const hits = new Map<string, number[]>();
 const WINDOW_MS = 60 * 60 * 1000;
 const MAX_PER_WINDOW = 5;
@@ -88,24 +89,19 @@ export async function POST(request: Request) {
     return json({ error: "Geçersiz istek." }, 400);
   }
 
-  const { skinType, steps, budget, sensitivity, sunscreen } = body || {};
-  if (
-    !ALLOWED_SKIN.includes(skinType) ||
-    !ALLOWED_STEPS.includes(steps) ||
-    !ALLOWED_BUDGET.includes(budget) ||
-    !ALLOWED_SENS.includes(sensitivity) ||
-    !ALLOWED_SUN.includes(sunscreen)
-  ) {
+  const { skinType, steps } = body || {};
+  if (!ALLOWED_SKIN.includes(skinType) || !ALLOWED_STEPS.includes(steps)) {
     return json({ error: "Geçersiz seçim." }, 400);
   }
 
-  const system = `Sen bir cilt bakımı rehberisin. Kullanıcının cilt tipine ve tercihlerine göre Türkçe, sade ve uygulanabilir bir günlük bakım rutini hazırlarsın.
+  const system = `Sen bir cilt bakımı rehberisin. Kullanıcının cilt tipine göre Türkçe, sade ve uygulanabilir bir günlük bakım rutini hazırlarsın.
 
 Kurallar:
 - Marka veya ürün adı ASLA verme. Sadece ürün tipi ve aktif içerik öner (örn. "Sülfatsız krem temizleyici", "Seramid içeren nemlendirici").
 - Tıbbi teşhis koyma, tedavi vaadi verme.
-- Hassas cilt veya hassasiyet seçildiyse güçlü asitleri, retinolü ve parfümü önerme.
-- Güneş kremi "hayir" seçilse bile sabah rutininde SPF'in önemini kısa bir adım olarak ekle ama nazikçe.
+- Cilt tipi "Hassas Cilt" ise güçlü asitleri, retinolü ve parfümü önerme.
+- Sabah rutininin son adımı her zaman güneş koruyucu (SPF) olsun.
+- Akşam rutini sabahtan farklı olsun: makyaj/güneş kremini çıkaran temizleme ile başlasın, bakım ve onarım odaklı olsun.
 - Her adımın "why" alanı en fazla 1 cümle olsun.
 - "weekly" alanında en fazla 2 haftalık bakım öner (örn. nazik peeling, maske). Gerekmiyorsa boş dizi ver.
 - SADECE geçerli JSON döndür. Başına veya sonuna açıklama, markdown, kod bloğu ekleme.
@@ -118,10 +114,7 @@ JSON şeması:
 }`;
 
   const userMsg = `Cilt tipi: ${skinType}
-Adım sayısı: ${STEP_COUNT[steps]}
-Bütçe: ${budget}
-Hassasiyet: ${sensitivity === "hassas" ? "Cildim hassas, tahrişe yatkın" : "Özel bir hassasiyet yok"}
-Güneş kremi kullanımı: ${sunscreen === "evet" ? "Kullanıyorum" : "Kullanmıyorum"}`;
+Adım sayısı: ${STEP_COUNT[steps]}`;
 
   try {
     const r = await fetch("https://api.anthropic.com/v1/messages", {
