@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { PageHero } from "../components/PageHero";
 import { Sparkles, RefreshCw, ChevronRight } from "lucide-react";
 import { supabase } from "../../supabaseClient";
+import { RoutineGenerator } from "../components/RoutineGenerator";
 
 export const SKIN_TYPE_KEY = "glow_skin_type_result";
 
@@ -306,6 +307,8 @@ export function CiltTipiniOgren() {
                   </ul>
                 </div>
               )}
+
+              <RoutineGenerator skinType={result.title} isLoggedIn={isLoggedIn} />
 
               <div className="flex flex-col sm:flex-row items-center justify-between gap-4 border-t border-[#EAE7E2] pt-6">
                 <p className="text-xs text-[#8C857B]" style={{ fontFamily: "Geist" }}>

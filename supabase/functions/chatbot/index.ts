@@ -65,3 +65,9 @@ Deno.serve(async (req) => {
     });
   }
 });
+
+
+
+//Bu dosyanın işi: kullanıcıdan gelen mesajı al, Claude'a gönder (bunu yaparken gizli
+//  tuttuğumuz API anahtarını kullan), Claude'un cevabını geri döndür. Ayrıca bu dosyanın içine "sadece cilt bakımı
+//  konularında cevap ver" kuralını yazdık (system prompt).
