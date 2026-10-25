@@ -19,59 +19,12 @@ interface Props {
   isLoggedIn: boolean;
 }
 
-type Prefs = {
-  steps: "minimal" | "standart" | "detayli";
-  budget: "ekonomik" | "orta" | "premium";
-  sensitivity: "yok" | "hassas";
-  sunscreen: "evet" | "hayir";
-};
+type StepCount = "minimal" | "standart" | "detayli";
 
-const defaultPrefs: Prefs = {
-  steps: "standart",
-  budget: "orta",
-  sensitivity: "yok",
-  sunscreen: "evet",
-};
-
-const groups: {
-  key: keyof Prefs;
-  label: string;
-  options: { value: string; label: string }[];
-}[] = [
-  {
-    key: "steps",
-    label: "Kaç adımlık rutin istersin?",
-    options: [
-      { value: "minimal", label: "Minimal (3)" },
-      { value: "standart", label: "Standart (4)" },
-      { value: "detayli", label: "Detaylı (5)" },
-    ],
-  },
-  {
-    key: "budget",
-    label: "Bütçe aralığın",
-    options: [
-      { value: "ekonomik", label: "Ekonomik" },
-      { value: "orta", label: "Orta" },
-      { value: "premium", label: "Premium" },
-    ],
-  },
-  {
-    key: "sensitivity",
-    label: "Cildin hassas mı?",
-    options: [
-      { value: "yok", label: "Hayır" },
-      { value: "hassas", label: "Evet, tahrişe yatkın" },
-    ],
-  },
-  {
-    key: "sunscreen",
-    label: "Güneş kremi kullanıyor musun?",
-    options: [
-      { value: "evet", label: "Evet" },
-      { value: "hayir", label: "Hayır" },
-    ],
-  },
+const stepOptions: { value: StepCount; label: string; hint: string }[] = [
+  { value: "minimal", label: "Minimal", hint: "3 adım" },
+  { value: "standart", label: "Standart", hint: "4 adım" },
+  { value: "detayli", label: "Detaylı", hint: "5 adım" },
 ];
 
 function StepList({ title, icon, items }: { title: string; icon: React.ReactNode; items: RoutineStep[] }) {
@@ -104,7 +57,7 @@ function StepList({ title, icon, items }: { title: string; icon: React.ReactNode
 
 export function RoutineGenerator({ skinType, isLoggedIn }: Props) {
   const [open, setOpen] = useState(false);
-  const [prefs, setPrefs] = useState<Prefs>(defaultPrefs);
+  const [steps, setSteps] = useState<StepCount>("standart");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [routine, setRoutine] = useState<Routine | null>(null);
@@ -112,6 +65,7 @@ export function RoutineGenerator({ skinType, isLoggedIn }: Props) {
   const generate = async () => {
     setLoading(true);
     setError(null);
+
     try {
       const {
         data: { session },
@@ -128,7 +82,7 @@ export function RoutineGenerator({ skinType, isLoggedIn }: Props) {
           "Content-Type": "application/json",
           Authorization: `Bearer ${session.access_token}`,
         },
-        body: JSON.stringify({ skinType, ...prefs }),
+        body: JSON.stringify({ skinType, steps }),
       });
 
       const data = await res.json().catch(() => ({}));
@@ -193,36 +147,30 @@ export function RoutineGenerator({ skinType, isLoggedIn }: Props) {
       <div className="flex items-center gap-2 text-[#1C1A17]">
         <Sparkles size={18} className="text-[#7A8B6F]" />
         <h4 className="text-lg font-medium" style={{ fontFamily: "Lora" }}>
-          Rutinini Kişiselleştir
+          Kaç adımlık rutin istersin?
         </h4>
       </div>
 
-      {groups.map((g) => (
-        <div key={g.key} className="flex flex-col gap-2">
-          <span className="text-sm text-[#5E5954]" style={{ fontFamily: "Geist" }}>
-            {g.label}
-          </span>
-          <div className="flex flex-wrap gap-2">
-            {g.options.map((o) => {
-              const selected = prefs[g.key] === o.value;
-              return (
-                <button
-                  key={o.value}
-                  onClick={() => setPrefs({ ...prefs, [g.key]: o.value } as Prefs)}
-                  className={`px-4 py-2 rounded-full border text-sm transition-all ${
-                    selected
-                      ? "border-[#1C1A17] bg-[#1C1A17] text-white"
-                      : "border-[#EAE7E2] bg-white text-[#5E5954] hover:border-[#8C857B]"
-                  }`}
-                  style={{ fontFamily: "Geist" }}
-                >
-                  {o.label}
-                </button>
-              );
-            })}
-          </div>
-        </div>
-      ))}
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+        {stepOptions.map((o) => {
+          const selected = steps === o.value;
+          return (
+            <button
+              key={o.value}
+              onClick={() => setSteps(o.value)}
+              className={`flex flex-col items-center gap-0.5 py-4 px-4 rounded-xl border transition-all ${
+                selected
+                  ? "border-[#1C1A17] bg-[#1C1A17] text-white"
+                  : "border-[#EAE7E2] bg-white text-[#5E5954] hover:border-[#8C857B]"
+              }`}
+              style={{ fontFamily: "Geist" }}
+            >
+              <span className="text-sm md:text-base font-medium">{o.label}</span>
+              <span className={`text-xs ${selected ? "text-white/70" : "text-[#8C857B]"}`}>{o.hint}</span>
+            </button>
+          );
+        })}
+      </div>
 
       {!isLoggedIn && (
         <p className="text-xs text-[#8C857B]" style={{ fontFamily: "Geist" }}>
